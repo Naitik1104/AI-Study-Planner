@@ -1,0 +1,125 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id              String            @id @default(uuid())
+  name            String
+  email           String            @unique
+  dailyStudyHours Int
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  subjects        Subject[]
+  schedules       ScheduleVersion[]
+}
+
+model Subject {
+  id        String   @id @default(uuid())
+  userId    String
+  name      String
+  examDate  DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  topics    Topic[]
+}
+
+enum Difficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+enum TopicStatus {
+  ACTIVE
+  COMPLETED
+}
+
+model Topic {
+  id             String         @id @default(uuid())
+  subjectId      String
+  name           String
+  difficulty     Difficulty
+  estimatedHours Float
+  status         TopicStatus    @default(ACTIVE)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  subject        Subject        @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  quizQuestions  QuizQuestion[]
+  quizAttempts   QuizAttempt[]
+  studySessions  StudySession[]
+}
+
+enum QuestionType {
+  MCQ
+}
+
+model QuizQuestion {
+  id            String       @id @default(uuid())
+  topicId       String
+  question      String
+  questionType  QuestionType @default(MCQ)
+  options       Json         // Stored as JSON array
+  correctAnswer String
+  explanation   String       @db.Text
+  topic         Topic        @relation(fields: [topicId], references: [id], onDelete: Cascade)
+}
+
+model QuizAttempt {
+  id             String   @id @default(uuid())
+  topicId        String
+  score          Int
+  totalQuestions Int
+  percentage     Float
+  attemptedAt    DateTime @default(now())
+  topic          Topic    @relation(fields: [topicId], references: [id], onDelete: Cascade)
+}
+
+enum SessionType {
+  STUDY
+  REVISION
+  QUIZ
+}
+
+enum SessionStatus {
+  PLANNED
+  COMPLETED
+  MISSED
+  SKIPPED
+}
+
+model StudySession {
+  id                String          @id @default(uuid())
+  topicId           String
+  date              DateTime        @db.Date
+  startTime         String          // Format HH:mm
+  durationMinutes   Int
+  sessionType       SessionType
+  status            SessionStatus   @default(PLANNED)
+  scheduleVersionId String
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  topic             Topic           @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  scheduleVersion   ScheduleVersion @relation(fields: [scheduleVersionId], references: [id], onDelete: Cascade)
+}
+
+enum ScheduleTrigger {
+  INITIAL_GENERATION
+  QUIZ_RESULT
+  MISSED_SESSION
+  MANUAL_REGENERATION
+}
+
+model ScheduleVersion {
+  id            String          @id @default(uuid())
+  userId        String
+  trigger       ScheduleTrigger
+  createdAt     DateTime        @default(now())
+  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  studySessions StudySession[]
+}
