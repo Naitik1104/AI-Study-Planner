@@ -6,6 +6,9 @@ export type Topic = {
 	difficulty: Difficulty
 	hours: number
 	completed: boolean
+	priorityScore?: number
+	weaknessScore?: number
+	quizAttemptsCount?: number
 }
 
 export type Subject = {
@@ -16,6 +19,8 @@ export type Subject = {
 	topics: Topic[]
 }
 
+export type SessionType = 'STUDY' | 'REVISION' | 'QUIZ'
+
 export type StudySession = {
 	id: string
 	topicId: string
@@ -24,6 +29,7 @@ export type StudySession = {
 	date: string
 	startTime: string
 	durationMinutes: number
+	sessionType?: SessionType
 	completed: boolean
 }
 
@@ -32,6 +38,7 @@ export type QuizQuestion = {
 	topicId: string
 	prompt: string
 	options: string[]
+	explanation?: string
 	topicName: string
 	subjectName: string
 }
@@ -45,7 +52,11 @@ export type PlannerData = {
 
 type PlannerResponse = {
 	profile: { dailyStudyHours: number }
-	subjects: Omit<Subject, 'color'>[]
+	subjects: (Omit<Subject, 'color' | 'topics'> & {
+		topics: (Omit<Topic, 'difficulty'> & {
+			difficulty: string
+		})[]
+	})[]
 	sessions: StudySession[]
 	questions: QuizQuestion[]
 }
@@ -80,7 +91,7 @@ export const plannerApi = {
 			dailyStudyHours: result.profile.dailyStudyHours,
 			subjects: result.subjects.map((subject, index) => ({
 				...subject,
-				color: colors[index % colors.length],
+				color: colors[index % colors.length] ?? '#a9c9f4',
 				topics: subject.topics.map((topic) => ({
 					...topic,
 					difficulty: `${topic.difficulty[0]}${topic.difficulty.slice(1).toLowerCase()}` as Difficulty,
@@ -92,11 +103,22 @@ export const plannerApi = {
 	},
 	addSubject: (name: string, examDate: string) => request<Subject>('/subjects', json('POST', { name, examDate })),
 	removeSubject: (subjectId: string) => request<void>(`/subjects/${encodeURIComponent(subjectId)}`, json('DELETE')),
-	addTopic: (subjectId: string, name: string, difficulty: Difficulty, hours: number) => request<Topic>(`/subjects/${encodeURIComponent(subjectId)}/topics`, json('POST', { name, difficulty: difficulty.toUpperCase(), hours })),
-	setTopicCompleted: (topicId: string, completed: boolean) => request<Topic>(`/topics/${encodeURIComponent(topicId)}`, json('PATCH', { completed })),
-	generateSchedule: () => request<StudySession[]>('/schedule/generate', json('POST')),
-	setSessionCompleted: (sessionId: string, completed: boolean) => request<StudySession>(`/sessions/${encodeURIComponent(sessionId)}`, json('PATCH', { completed })),
-	addQuestion: (topicId: string, prompt: string, options: string[], answer: string) => request<{ id: string }>(`/topics/${encodeURIComponent(topicId)}/questions`, json('POST', { prompt, options, answer })),
+	addTopic: (subjectId: string, name: string, difficulty: Difficulty, hours: number) =>
+		request<Topic>(`/subjects/${encodeURIComponent(subjectId)}/topics`, json('POST', { name, difficulty: difficulty.toUpperCase(), hours })),
+	setTopicCompleted: (topicId: string, completed: boolean) =>
+		request<Topic>(`/topics/${encodeURIComponent(topicId)}`, json('PATCH', { completed })),
+	generateSchedule: (customPrompt?: string) =>
+		request<StudySession[]>('/schedule/generate', json('POST', { customPrompt })),
+	setSessionCompleted: (sessionId: string, completed: boolean) =>
+		request<StudySession>(`/sessions/${encodeURIComponent(sessionId)}`, json('PATCH', { completed })),
+	addQuestion: (topicId: string, prompt: string, options: string[], answer: string, explanation?: string) =>
+		request<{ id: string }>(`/topics/${encodeURIComponent(topicId)}/questions`, json('POST', { prompt, options, answer, explanation })),
+	generateAiQuiz: (topicId: string) =>
+		request<QuizQuestion[]>(`/topics/${encodeURIComponent(topicId)}/generate-quiz`, json('POST')),
 	removeQuestion: (questionId: string) => request<void>(`/questions/${encodeURIComponent(questionId)}`, json('DELETE')),
-	answerQuestion: (questionId: string, selected: string) => request<{ correct: boolean; correctAnswer: string; attemptId: string }>(`/questions/${encodeURIComponent(questionId)}/answer`, json('POST', { selected })),
+	answerQuestion: (questionId: string, selected: string) =>
+		request<{ correct: boolean; correctAnswer: string; explanation?: string; attemptId: string }>(
+			`/questions/${encodeURIComponent(questionId)}/answer`,
+			json('POST', { selected })
+		),
 }

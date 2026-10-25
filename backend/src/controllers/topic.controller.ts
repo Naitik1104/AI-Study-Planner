@@ -20,7 +20,9 @@ export const createTopic = async (request: Request, response: Response) => {
   }
 
   const user = await getLocalUser();
-  const subject = await prisma.subject.findFirst({ where: { id: request.params.subjectId as string, userId: user.id } });
+  const subject = await prisma.subject.findFirst({
+    where: { id: request.params.subjectId as string, userId: user.id },
+  });
   if (!subject) {
     response.status(404).json({ message: "Subject not found" });
     return;
@@ -34,7 +36,7 @@ export const createTopic = async (request: Request, response: Response) => {
       estimatedHours: parsed.data.hours,
     },
   });
-  
+
   response.status(201).json({
     id: topic.id,
     name: topic.name,
@@ -66,4 +68,3 @@ export const updateTopicStatus = async (request: Request, response: Response) =>
   });
   response.json({ id: updated.id, completed: updated.status === TopicStatus.COMPLETED });
 };
-
