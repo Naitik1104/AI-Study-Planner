@@ -135,8 +135,8 @@ export const plannerApi = {
 		request<StudySession>(`/sessions/${encodeURIComponent(sessionId)}`, json('PATCH', { completed })),
 	addQuestion: (topicId: string, prompt: string, options: string[], answer: string, explanation?: string) =>
 		request<{ id: string }>(`/topics/${encodeURIComponent(topicId)}/questions`, json('POST', { prompt, options, answer, explanation })),
-	generateAiQuiz: (topicId: string) =>
-		request<QuizQuestion[]>(`/topics/${encodeURIComponent(topicId)}/generate-quiz`, json('POST')),
+	generateAiQuiz: (topicId: string, options?: { difficulty?: Difficulty; customPrompt?: string; count?: number }) =>
+		request<QuizQuestion[]>(`/topics/${encodeURIComponent(topicId)}/generate-quiz`, json('POST', options ?? {})),
 	removeQuestion: (questionId: string) => request<void>(`/questions/${encodeURIComponent(questionId)}`, json('DELETE')),
 	answerQuestion: (questionId: string, selected: string) =>
 		request<{ correct: boolean; correctAnswer: string; explanation?: string; attemptId: string }>(

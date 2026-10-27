@@ -117,9 +117,15 @@ export const answerQuestion = async (request: Request, response: Response) => {
   });
 };
 
+const generateQuizSchema = z.object({
+  difficulty: z.enum(["EASY", "MEDIUM", "HARD"]).optional(),
+  customPrompt: z.string().optional(),
+  count: z.number().int().min(1).max(8).optional(),
+});
+
 /**
  * Generate AI quiz questions on-demand for a topic.
- * Uses Gemini API if connected, or the algorithmic knowledge generator if no API key is present.
+ * Supports choosing difficulty and providing a custom focus prompt.
  */
 export const generateAiQuestionsForTopic = async (request: Request, response: Response) => {
   const user = await getLocalUser();
@@ -133,10 +139,17 @@ export const generateAiQuestionsForTopic = async (request: Request, response: Re
     return;
   }
 
+  const parsed = generateQuizSchema.safeParse(request.body);
+  const targetDifficulty = (parsed.success && parsed.data.difficulty) ? parsed.data.difficulty : topic.difficulty;
+  const customPrompt = (parsed.success && parsed.data.customPrompt) ? parsed.data.customPrompt : "";
+  const count = (parsed.success && parsed.data.count) ? parsed.data.count : 3;
+
   const generatedQuestions = await generateQuizQuestions(
     topic.name,
     topic.subject.name,
-    topic.difficulty
+    targetDifficulty,
+    customPrompt,
+    count
   );
 
   const createdQuestions = [];

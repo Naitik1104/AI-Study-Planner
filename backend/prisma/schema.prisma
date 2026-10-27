@@ -62,7 +62,7 @@ enum QuestionType {
 model QuizQuestion {
   id            String       @id @default(uuid())
   topicId       String
-  question      String
+  question      String       @db.Text
   questionType  QuestionType @default(MCQ)
   options       Json         // Stored as JSON array
   correctAnswer String

@@ -305,15 +305,29 @@ export async function parseCustomPrompt(
 /**
  * Checks the live engine status:
  * Probes OpenCode API / Gemini API to determine if API is usable or fallback should be shown.
+ * Provides detailed console readings in backend for full diagnostic transparency.
  */
 export async function probeAiEngine(): Promise<AiEngineStatus> {
   const now = Date.now();
-  if (cachedStatus && now - cachedStatus.timestamp < 30000) {
+  if (cachedStatus && now - cachedStatus.timestamp < 15000) {
     return cachedStatus;
   }
 
   const openCodeKey = process.env.OPEN_CODE_API_KEY;
+  let openCodeReading = "Not configured";
+  let geminiReading = "Not configured";
+
+  console.log("\n================ [AI Engine Diagnostics Probe] ================");
+
+  // 1. Check OpenCode API
   if (openCodeKey && openCodeKey.trim().length > 5) {
+    const maskedKey = `${openCodeKey.slice(0, 8)}...${openCodeKey.slice(-4)}`;
+    const model = process.env.OPEN_CODE_MODEL || "gpt-5.4-mini";
+    console.log(`[Diagnostic] Probing OpenCode API:`);
+    console.log(`  • Endpoint: https://opencode.ai/inference/v1/chat/completions`);
+    console.log(`  • Model: ${model}`);
+    console.log(`  • Key: ${maskedKey}`);
+
     try {
       const res = await fetch("https://opencode.ai/inference/v1/chat/completions", {
         method: "POST",
@@ -322,39 +336,55 @@ export async function probeAiEngine(): Promise<AiEngineStatus> {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: process.env.OPEN_CODE_MODEL || "gpt-5.4-mini",
+          model,
           messages: [{ role: "user", content: "ping" }],
           max_tokens: 1,
         }),
       });
 
       if (res.ok) {
+        console.log(`  • Result: SUCCESS (HTTP ${res.status} OK)`);
+        console.log(`[Diagnostic] Switching engine to ACTIVE API (🟢 Green Dot)\n================================================================\n`);
         cachedStatus = {
           engine: "api",
           provider: "opencode",
           label: "AI Engine Active",
-          details: "AI engine connected for intelligent study planning",
+          details: `OpenCode API connected (${model})`,
           timestamp: now,
         };
         lastPlanningEngine = "api";
         lastPlanningProvider = "opencode";
         return cachedStatus;
+      } else {
+        const errorBody = await res.text();
+        openCodeReading = `HTTP ${res.status}: ${errorBody.slice(0, 150)}`;
+        console.log(`  • Result: FAILED (HTTP ${res.status})`);
+        console.log(`  • Error Details: ${errorBody.slice(0, 200)}`);
       }
-    } catch {
-      // Fall through to fallback
+    } catch (err: any) {
+      openCodeReading = `Network error: ${err.message}`;
+      console.log(`  • Result: NETWORK ERROR (${err.message})`);
     }
+  } else {
+    console.log(`[Diagnostic] OpenCode API Key is missing or empty in backend/.env`);
   }
 
-  // If OpenCode returned error or no key, check Gemini
+  // 2. Check Gemini API
   const geminiKey = process.env.GEMINI_API_KEY;
   if (geminiKey && geminiKey.trim().length > 10 && !geminiKey.includes("your-api-key")) {
+    const maskedGemini = `${geminiKey.slice(0, 8)}...`;
+    console.log(`[Diagnostic] Probing Secondary Provider (Gemini API):`);
+    console.log(`  • Model: gemini-2.5-flash`);
+    console.log(`  • Key: ${maskedGemini}`);
     try {
-      const ai = new GoogleGenAI({ apiKey: geminiKey });
+      const ai = new GoogleGenAI({ apiKey: geminiKey.trim() });
       const resp = await ai.models.generateContent({
         model: "gemini-2.5-flash",
         contents: "ping",
       });
       if (resp.text) {
+        console.log(`  • Result: SUCCESS (Gemini responded)`);
+        console.log(`[Diagnostic] Switching engine to ACTIVE API (🟢 Green Dot)\n================================================================\n`);
         cachedStatus = {
           engine: "api",
           provider: "gemini",
@@ -366,17 +396,26 @@ export async function probeAiEngine(): Promise<AiEngineStatus> {
         lastPlanningProvider = "gemini";
         return cachedStatus;
       }
-    } catch {
-      // Fall through
+    } catch (err: any) {
+      geminiReading = `Error: ${err.message?.slice(0, 150)}`;
+      console.log(`  • Result: FAILED (${err.message?.slice(0, 200)})`);
     }
+  } else {
+    console.log(`[Diagnostic] Gemini API Key is missing or default placeholder in backend/.env`);
   }
 
-  // Fallback engine
+  // 3. Fallback engine
+  console.log(`[Diagnostic] Active Engine Decision: FALLBACK ALGORITHM (🔵 Blue Dot)`);
+  console.log(`  • OpenCode Status: ${openCodeReading}`);
+  console.log(`  • Gemini Status: ${geminiReading}`);
+  console.log(`  • Explanation: Cloud APIs unavailable or returned 401/402/403. Running local MCDA + Spaced Repetition engine.`);
+  console.log(`================================================================\n`);
+
   cachedStatus = {
     engine: "fallback",
     provider: "fallback",
     label: "Fallback Algo Active",
-    details: "Using deterministic Multi-Criteria Decision Analysis (MCDA) + cognitive interleaving",
+    details: `API Inactive (${openCodeReading}) - Using deterministic planner`,
     timestamp: now,
   };
   lastPlanningEngine = "fallback";

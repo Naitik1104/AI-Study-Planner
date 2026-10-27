@@ -5,6 +5,7 @@ import {
   CalendarDays,
   Check,
   CheckCircle2,
+  ChevronRight,
   CircleHelp,
   Clock3,
   GraduationCap,
@@ -13,7 +14,7 @@ import {
   Plus,
   RefreshCw,
   Search,
-  Sparkles,
+  SlidersHorizontal,
   Target,
   Trash2,
   X,
@@ -150,7 +151,6 @@ function App() {
   }
 
   async function generatePlan(customPrompt?: string) {
-    let resultEngine: 'api' | 'fallback' = data.aiStatus?.engine ?? 'fallback'
     let sessionCount = 0
     const sessions = await persist(async () => {
       const res = await plannerApi.generateSchedule(customPrompt)
@@ -159,24 +159,21 @@ function App() {
         return res
       } else {
         sessionCount = res.sessions.length
-        resultEngine = res.aiEngine
         return res.sessions
       }
     }, 'Study plan saved')
 
     if (!sessions) return
     setView('schedule')
-    const engineNotice = resultEngine === 'api'
-      ? `🟢 ${sessionCount} sessions planned with AI`
-      : `🔵 ${sessionCount} sessions planned with algorithm`
-    setNotice(engineNotice)
+    setNotice(`Scheduled ${sessionCount} study sessions successfully`)
   }
 
-  async function generateAiQuiz(topicId: string) {
-    const questions = await persist(() => plannerApi.generateAiQuiz(topicId), 'AI generated diagnostic quiz questions!')
+  async function generateAiQuiz(topicId: string, options?: { difficulty?: Difficulty; customPrompt?: string }) {
+    const questions = await persist(() => plannerApi.generateAiQuiz(topicId, options), 'Diagnostic quiz questions generated!')
     if (questions) {
       setView('quizzes')
     }
+    return questions
   }
 
   async function toggleSession(sessionId: string) {
@@ -237,11 +234,11 @@ function App() {
           {loadError && <div className="connection-banner" role="alert"><span>{loadError}</span><button className="text-button" onClick={() => void reloadPlanner()}>Retry</button></div>}
           <section className="page-heading">
             <div>
-              <div className="eyebrow"><span className="eyebrow-dot" /> AI STUDY PLANNER</div>
+              <div className="eyebrow"><span className="eyebrow-dot" /> STUDY PLANNER</div>
               <h1>{pageTitle}</h1>
-              <p>{view === 'overview' ? 'Intelligent scheduling powered by exam urgency, difficulty & active recall.' : view === 'subjects' ? 'Organize subjects, track difficulty ratings, and inspect AI priority weights.' : view === 'schedule' ? 'Chunked Pomodoro sessions with cognitive interleaving and spaced revision.' : 'Active recall question bank with AI quiz generation and adaptive score feedback.'}</p>
+              <p>{view === 'overview' ? 'Personalized timetable optimized for exam dates, topic difficulty & retrieval practice.' : view === 'subjects' ? 'Manage curriculum subjects, track syllabus progress, and set difficulty levels.' : view === 'schedule' ? 'Chunked study sessions with interleaving and spaced revision intervals.' : 'Diagnostic practice questions to test concept mastery and update learning priorities.'}</p>
             </div>
-            {view === 'overview' && <button className="button button-lime" onClick={() => generatePlan()}><Sparkles size={16} /> Build AI study plan <ArrowRight size={15} /></button>}
+            {view === 'overview' && <button className="button button-lime" onClick={() => generatePlan()}><CalendarDays size={15} /> Build study plan <ArrowRight size={14} /></button>}
           </section>
 
           {view === 'overview' && <Overview
@@ -308,10 +305,10 @@ function Overview({ data, upcomingExams, todaysSessions, remainingTopics, comple
   return <>
     <section className="welcome-band">
       <div className="welcome-copy">
-        <div className="welcome-kicker"><Sparkles size={13} /> ADAPTIVE AI ENGINE READY</div>
+        <div className="welcome-kicker"><Target size={13} /> EXAM PREPARATION & RETENTION</div>
         <h2>Smarter studying, <em>measurable results</em>.</h2>
         <p>{remainingTopics.length ? `${remainingTopics.length} active topics prioritized across ${data.subjects.length} subjects based on exam dates and quiz mastery.` : 'Add a subject and its topics to generate your personalized study plan.'}</p>
-        <button className="button button-lime" onClick={onGeneratePlan}><Sparkles size={14} /> Recalculate AI plan <ArrowRight size={14} /></button>
+        <button className="button button-lime" onClick={onGeneratePlan}><RefreshCw size={13} /> Recalculate schedule <ArrowRight size={14} /></button>
       </div>
     </section>
 
@@ -328,8 +325,8 @@ function Overview({ data, upcomingExams, todaysSessions, remainingTopics, comple
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <span style={{ display: 'grid', width: '28px', height: '28px', placeItems: 'center', borderRadius: '6px', background: '#fcebe6', color: '#b84126' }}><Zap size={16} /></span>
           <div>
-            <strong style={{ fontSize: '12px', color: '#363b34' }}>Top Priority Focus (MCDA Scored)</strong>
-            <span style={{ display: 'block', fontSize: '11px', color: '#888f82' }}>Based on proximity to exam date and quiz score: {highPriorityTopics.map(t => `${t.name} (${t.priorityScore ?? 50}%)`).join(', ')}</span>
+            <strong style={{ fontSize: '12px', color: '#363b34' }}>Top Priority Topics</strong>
+            <span style={{ display: 'block', fontSize: '11px', color: '#888f82' }}>Calculated by exam proximity & diagnostic scores: {highPriorityTopics.map(t => `${t.name} (${t.priorityScore ?? 50}%)`).join(', ')}</span>
           </div>
         </div>
         <button className="button button-outline button-small" onClick={() => onView('schedule')}>View in schedule <ArrowRight size={13} /></button>
@@ -412,7 +409,7 @@ function SubjectDetail({ subject, onAddTopic, onToggleTopic, onRemove, onGenerat
   onAddTopic: () => void
   onToggleTopic: (subjectId: string, topicId: string) => void
   onRemove: () => void
-  onGenerateAiQuiz: (topicId: string) => void
+  onGenerateAiQuiz: (topicId: string, options?: { difficulty?: Difficulty; customPrompt?: string }) => void
 }) {
   const done = subject.topics.filter((topic) => topic.completed).length
   return (
@@ -453,7 +450,7 @@ function SubjectDetail({ subject, onAddTopic, onToggleTopic, onRemove, onGenerat
                   <span>{topic.hours} estimated hours {topic.quizAttemptsCount ? `· ${topic.quizAttemptsCount} quizzes taken` : ''}</span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <button className="button-ai-quiz" onClick={() => onGenerateAiQuiz(topic.id)} title="Generate AI quiz questions for active recall"><Sparkles size={12} /> AI Quiz</button>
+                  <button className="button-ai-quiz" onClick={() => onGenerateAiQuiz(topic.id, { difficulty: topic.difficulty })} title="Practice diagnostic questions"><BookOpen size={12} /> Practice Quiz</button>
                   <span className={`difficulty difficulty-${topic.difficulty.toLowerCase()}`}>{topic.difficulty}</span>
                 </div>
               </article>
@@ -488,12 +485,12 @@ function Schedule({ data, onGenerate, onToggleSession }: {
 
   return (
     <section className="schedule-page">
-      {/* AI Prompting & Intelligent Generation Header */}
+      {/* Scheduling Preferences Header */}
       <div className="ai-planner-bar">
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px', marginBottom: '14px' }}>
           <div>
-            <span className="section-kicker"><Sparkles size={13} /> CUSTOM INSTRUCTIONS & PROMPTS</span>
-            <strong style={{ fontSize: '13px', color: '#2b3127' }}>Personalize your study schedule</strong>
+            <span className="section-kicker"><SlidersHorizontal size={13} /> SCHEDULE PREFERENCES & FOCUS</span>
+            <strong style={{ fontSize: '13px', color: '#2b3127' }}>Set subject focus and timetable priorities</strong>
           </div>
           <span style={{ fontSize: '11px', color: '#747c6e' }}>Daily capacity: <strong>{data.dailyStudyHours} hrs/day</strong></span>
         </div>
@@ -503,10 +500,10 @@ function Schedule({ data, onGenerate, onToggleSession }: {
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') onGenerate(prompt) }}
-            placeholder="e.g. Focus on Linked list more, give extra time to DBMS transactions..."
+            placeholder="e.g. Focus on Linked Lists more, prioritize Network Security, balance all subjects..."
           />
           <button className="button button-lime" onClick={() => onGenerate(prompt)}>
-            <Sparkles size={16} /> Generate study plan
+            <CalendarDays size={15} /> Update timetable
           </button>
         </div>
         <div className="ai-prompt-chips">
@@ -574,7 +571,7 @@ function Quizzes({ data, onAddQuestion, onRemoveQuestion, onAnswerQuestion, onGe
   onAddQuestion: (topicId: string, prompt: string, options: string[], answer: string, explanation?: string) => Promise<unknown>
   onRemoveQuestion: (id: string) => Promise<unknown>
   onAnswerQuestion: (questionId: string, selected: string) => Promise<{ correct: boolean; correctAnswer: string; explanation?: string }>
-  onGenerateAiQuiz: (topicId: string) => Promise<unknown>
+  onGenerateAiQuiz: (topicId: string, options?: { difficulty?: Difficulty; customPrompt?: string }) => Promise<unknown>
 }) {
   const [isCreating, setIsCreating] = useState(false)
   const [activeQuestion, setActiveQuestion] = useState<string | null>(null)
@@ -585,8 +582,80 @@ function Quizzes({ data, onAddQuestion, onRemoveQuestion, onAnswerQuestion, onGe
   const [isGeneratingAi, setIsGeneratingAi] = useState(false)
   const [quizError, setQuizError] = useState('')
   const [topicId, setTopicId] = useState(data.subjects.flatMap((subject) => subject.topics)[0]?.id ?? '')
-  const topics = data.subjects.flatMap((subject) => subject.topics.map((topic) => ({ ...topic, subjectName: subject.name })))
+  const [quizTopicId, setQuizTopicId] = useState(data.subjects.flatMap((subject) => subject.topics)[0]?.id ?? '')
+  const [quizDifficulty, setQuizDifficulty] = useState<Difficulty>('Medium')
+  const [quizPrompt, setQuizPrompt] = useState('')
+  const [searchQuery, setSearchQuery] = useState('')
+  const [selectedSubjectFilter, setSelectedSubjectFilter] = useState('ALL')
+  const [expandedSubjects, setExpandedSubjects] = useState<Record<string, boolean>>({})
+
+  const topics = data.subjects.flatMap((subject) => subject.topics.map((topic) => ({ ...topic, subjectName: subject.name, subjectId: subject.id })))
   const question = data.questions.find((item) => item.id === activeQuestion)
+
+  const quizQuickPrompts = [
+    'Time & Space Complexity',
+    'Scenario-based Architecture',
+    'Security Exploits & Mitigations',
+    'Bottlenecks & Trade-offs',
+    'Edge Cases & Fault Recovery',
+  ]
+
+  const filteredQuestions = useMemo(() => {
+    let result = data.questions
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase()
+      result = result.filter((item) => {
+        const topic = topics.find((entry) => entry.id === item.topicId)
+        return (
+          item.prompt.toLowerCase().includes(q) ||
+          item.topicName.toLowerCase().includes(q) ||
+          (topic?.subjectName.toLowerCase().includes(q) ?? false)
+        )
+      })
+    }
+    return result
+  }, [data.questions, searchQuery, topics])
+
+  const groupedQuestions = useMemo(() => {
+    return data.subjects
+      .map((s) => {
+        const subjectQuestions = filteredQuestions.filter(
+          (q) => q.subjectName.trim().toLowerCase() === s.name.trim().toLowerCase()
+        )
+        return {
+          subjectId: s.id,
+          subjectName: s.name,
+          subjectColor: s.color,
+          questions: subjectQuestions,
+        }
+      })
+      .filter((g) => selectedSubjectFilter === 'ALL' || g.subjectId === selectedSubjectFilter)
+      .filter((g) => g.questions.length > 0)
+  }, [data.subjects, filteredQuestions, selectedSubjectFilter])
+
+  const isSubjectExpanded = (subId: string) => {
+    if (selectedSubjectFilter !== 'ALL' && selectedSubjectFilter === subId) return true
+    return expandedSubjects[subId] ?? true
+  }
+
+  const toggleSubjectExpand = (subId: string) => {
+    setExpandedSubjects((prev) => ({
+      ...prev,
+      [subId]: !(prev[subId] ?? true),
+    }))
+  }
+
+  const expandAllSubjects = () => {
+    const next: Record<string, boolean> = {}
+    groupedQuestions.forEach((g) => { next[g.subjectId] = true })
+    setExpandedSubjects(next)
+  }
+
+  const collapseAllSubjects = () => {
+    const next: Record<string, boolean> = {}
+    groupedQuestions.forEach((g) => { next[g.subjectId] = false })
+    setExpandedSubjects(next)
+  }
 
   async function handleCreate(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -627,10 +696,17 @@ function Quizzes({ data, onAddQuestion, onRemoveQuestion, onAnswerQuestion, onGe
   }
 
   async function handleAiGen() {
-    if (!topicId) return
+    const targetTopicId = quizTopicId || topicId
+    if (!targetTopicId) return
     setIsGeneratingAi(true)
     try {
-      await onGenerateAiQuiz(topicId)
+      const generated = await onGenerateAiQuiz(targetTopicId, {
+        difficulty: quizDifficulty,
+        customPrompt: quizPrompt,
+      }) as { id: string }[] | undefined
+      if (generated && generated.length > 0) {
+        chooseQuestion(generated[0].id)
+      }
     } finally {
       setIsGeneratingAi(false)
     }
@@ -647,39 +723,214 @@ function Quizzes({ data, onAddQuestion, onRemoveQuestion, onAnswerQuestion, onGe
       <div className="quiz-intro">
         <div className="quiz-icon"><CircleHelp size={21} /></div>
         <div>
-          <span className="section-kicker">ACTIVE RECALL & ADAPTIVE RESCHEDULING</span>
+          <span className="section-kicker">ACTIVE RECALL & RETENTION PRACTICE</span>
           <h2>Diagnostic Practice Questions</h2>
-          <p>Every quiz score updates your topic weakness score in real-time, automatically triggering intelligent schedule adjustment.</p>
+          <p>Every response updates your topic mastery score in real-time, helping the scheduler allocate more practice where needed.</p>
         </div>
         <div style={{ display: 'flex', gap: '8px', marginLeft: 'auto' }}>
-          <button className="button button-lime button-small" onClick={handleAiGen} disabled={!topics.length || isGeneratingAi}>
-            <Sparkles size={15} /> {isGeneratingAi ? 'Synthesizing questions…' : 'Generate AI Quiz'}
-          </button>
           <button className="button button-dark button-small" onClick={() => setIsCreating((current) => !current)} disabled={!topics.length}>
             <Plus size={15} /> Write question
           </button>
         </div>
       </div>
 
+      {/* Practice Quiz Generator Bar */}
+      <div className="ai-planner-bar">
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+          <div>
+            <span className="section-kicker"><SlidersHorizontal size={13} /> PRACTICE QUIZ GENERATOR</span>
+            <strong style={{ fontSize: '13px', color: '#2b3127' }}>Generate targeted questions by topic, difficulty & learning objectives</strong>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ fontSize: '11px', color: '#747c6e', fontWeight: 600, marginRight: '4px' }}>Difficulty:</span>
+            {(['Easy', 'Medium', 'Hard'] as Difficulty[]).map((d) => (
+              <button
+                key={d}
+                type="button"
+                className={`difficulty-pill ${quizDifficulty === d ? 'active' : ''}`}
+                onClick={() => setQuizDifficulty(d)}
+              >
+                {d}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(210px, 300px) 1fr auto', gap: '10px', alignItems: 'center' }}>
+          <select
+            className="ai-prompt-input"
+            value={quizTopicId}
+            onChange={(e) => setQuizTopicId(e.target.value)}
+            style={{ cursor: 'pointer' }}
+          >
+            {data.subjects.map((s) => (
+              <optgroup key={s.id} label={s.name}>
+                {s.topics.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name} ({t.difficulty})
+                  </option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+          <input
+            className="ai-prompt-input"
+            value={quizPrompt}
+            onChange={(e) => setQuizPrompt(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') handleAiGen() }}
+            placeholder="e.g. Focus on scenario questions, time complexity, or security vulnerabilities..."
+          />
+          <button
+            className="button button-lime"
+            onClick={handleAiGen}
+            disabled={!quizTopicId || isGeneratingAi}
+            style={{ whiteSpace: 'nowrap' }}
+          >
+            <Target size={15} /> {isGeneratingAi ? 'Generating…' : 'Generate Quiz'}
+          </button>
+        </div>
+
+        <div className="ai-prompt-chips">
+          <span className="prompt-chip-label">Quick suggestions:</span>
+          {quizQuickPrompts.map((qp) => (
+            <button
+              key={qp}
+              type="button"
+              className="prompt-chip"
+              onClick={() => { setQuizPrompt(qp); }}
+            >
+              {qp}
+            </button>
+          ))}
+          {quizPrompt && (
+            <button
+              type="button"
+              className="prompt-chip"
+              style={{ color: '#b84126' }}
+              onClick={() => setQuizPrompt('')}
+            >
+              Clear prompt
+            </button>
+          )}
+        </div>
+      </div>
+
       <div className="quiz-workspace">
         <div className="question-bank">
-          <div className="panel-toolbar">
-            <div><h2>Question bank <span className="subtle-count">{data.questions.length}</span></h2><p>Linked to active topics</p></div>
+          <div className="panel-toolbar" style={{ marginBottom: '8px' }}>
+            <div>
+              <h2>Question bank <span className="subtle-count">{filteredQuestions.length}</span></h2>
+              <p>Grouped by subject</p>
+            </div>
+            <div style={{ display: 'flex', gap: '5px' }}>
+              <button
+                type="button"
+                className="qb-toggle-all-btn"
+                onClick={expandAllSubjects}
+                title="Expand all subjects"
+              >
+                Expand all
+              </button>
+              <button
+                type="button"
+                className="qb-toggle-all-btn"
+                onClick={collapseAllSubjects}
+                title="Collapse all subjects"
+              >
+                Collapse all
+              </button>
+            </div>
           </div>
-          {data.questions.length ? (
-            <div className="question-list">
-              {data.questions.map((item) => {
-                const topic = topics.find((entry) => entry.id === item.topicId)
+
+          {/* Horizontal Subject Pill Tabs */}
+          <div className="qb-tabs-bar" role="tablist" aria-label="Subject filter tabs">
+            <button
+              type="button"
+              className={`qb-tab-pill ${selectedSubjectFilter === 'ALL' ? 'active' : ''}`}
+              onClick={() => setSelectedSubjectFilter('ALL')}
+            >
+              All ({data.questions.length})
+            </button>
+            {data.subjects.map((s) => {
+              const count = data.questions.filter(
+                (q) => q.subjectName.trim().toLowerCase() === s.name.trim().toLowerCase()
+              ).length
+              if (count === 0) return null
+              return (
+                <button
+                  key={s.id}
+                  type="button"
+                  className={`qb-tab-pill ${selectedSubjectFilter === s.id ? 'active' : ''}`}
+                  onClick={() => setSelectedSubjectFilter(s.id)}
+                >
+                  <span className="qb-subject-dot" style={{ background: s.color }} />
+                  {s.name} ({count})
+                </button>
+              )
+            })}
+          </div>
+
+          <label className="search-field" style={{ marginBottom: '10px' }}>
+            <Search size={15} />
+            <input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search by keyword, topic or prompt..."
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                className="icon-button small-icon"
+                onClick={() => setSearchQuery('')}
+                title="Clear search"
+                style={{ marginLeft: 'auto' }}
+              >
+                <X size={13} />
+              </button>
+            )}
+          </label>
+
+          {groupedQuestions.length ? (
+            <div className="qb-accordion">
+              {groupedQuestions.map((group) => {
+                const isOpen = isSubjectExpanded(group.subjectId)
                 return (
-                  <div className={`question-bank-item ${activeQuestion === item.id ? 'selected' : ''}`} key={item.id}>
-                    <button onClick={() => chooseQuestion(item.id)}>
-                      <span className="question-topic">{topic?.subjectName ?? item.subjectName}</span>
-                      <strong>{item.prompt}</strong>
-                      <span>{topic?.name ?? item.topicName} · {item.options.length} choices</span>
+                  <div key={group.subjectId} className={`qb-group ${isOpen ? 'is-open' : ''}`}>
+                    <button
+                      type="button"
+                      className="qb-group-header"
+                      onClick={() => toggleSubjectExpand(group.subjectId)}
+                      aria-expanded={isOpen}
+                    >
+                      <ChevronRight size={14} className={`qb-chevron ${isOpen ? 'rotated' : ''}`} />
+                      <span className="qb-subject-dot" style={{ background: group.subjectColor }} />
+                      <span className="qb-group-title">{group.subjectName}</span>
+                      <span className="qb-group-count">{group.questions.length}</span>
                     </button>
-                    <button className="icon-button small-icon danger-icon" aria-label="Delete question" onClick={() => void deleteQuestion(item.id)}>
-                      <Trash2 size={15} />
-                    </button>
+
+                    {isOpen && (
+                      <div className="qb-group-items">
+                        {group.questions.map((item) => (
+                          <div
+                            className={`question-bank-item ${activeQuestion === item.id ? 'selected' : ''}`}
+                            key={item.id}
+                          >
+                            <button onClick={() => chooseQuestion(item.id)}>
+                              <span className="question-topic">{item.topicName}</span>
+                              <strong>{item.prompt}</strong>
+                              <span>{item.options.length} choices</span>
+                            </button>
+                            <button
+                              className="icon-button small-icon danger-icon"
+                              aria-label="Delete question"
+                              onClick={() => void deleteQuestion(item.id)}
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )
               })}
@@ -687,11 +938,17 @@ function Quizzes({ data, onAddQuestion, onRemoveQuestion, onAnswerQuestion, onGe
           ) : (
             <div className="question-empty">
               <div className="empty-icon"><CircleHelp size={22} /></div>
-              <strong>Your question bank is empty</strong>
-              <span>Generate questions with AI or write your own to measure topic mastery.</span>
-              <button className="button button-lime button-small" disabled={!topics.length || isGeneratingAi} onClick={handleAiGen} style={{ marginTop: '10px' }}>
-                <Sparkles size={14} /> Generate first AI Quiz
-              </button>
+              <strong>No questions found</strong>
+              <span>Try adjusting your subject filter or search keyword.</span>
+              {(selectedSubjectFilter !== 'ALL' || searchQuery) && (
+                <button
+                  className="button button-outline button-small"
+                  onClick={() => { setSelectedSubjectFilter('ALL'); setSearchQuery(''); }}
+                  style={{ marginTop: '8px' }}
+                >
+                  Reset filters
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -768,7 +1025,7 @@ function Quizzes({ data, onAddQuestion, onRemoveQuestion, onAnswerQuestion, onGe
                   )}
                   <div style={{ marginTop: '12px', fontSize: '11px', color: '#68705f', display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <RefreshCw size={13} />
-                    <span>Your topic mastery has been recorded. The AI scheduler has updated upcoming sessions automatically!</span>
+                    <span>Topic mastery recorded. Upcoming sessions have been adapted automatically.</span>
                   </div>
                 </div>
               ) : (
@@ -779,10 +1036,10 @@ function Quizzes({ data, onAddQuestion, onRemoveQuestion, onAnswerQuestion, onGe
             </div>
           ) : (
             <div className="quiz-placeholder">
-              <div className="quiz-deco"><div className="deco-note"><span /><span /><span /></div><div className="deco-star"><Sparkles size={19} /></div></div>
-              <span className="section-kicker">TEST TO REMEMBER</span>
+              <div className="quiz-deco"><div className="deco-note"><span /><span /><span /></div><div className="deco-star"><Target size={18} /></div></div>
+              <span className="section-kicker">RETRIEVAL PRACTICE</span>
               <h2>Active recall drives<br />real retention.</h2>
-              <p>Select a question from the question bank or generate a new AI Quiz for any topic.</p>
+              <p>Select a question from the question bank or generate practice questions for any topic.</p>
               <div className="quiz-tip"><Target size={17} /><span>Answering questions activates retrieval pathways, strengthening memory before exams.</span></div>
             </div>
           )}

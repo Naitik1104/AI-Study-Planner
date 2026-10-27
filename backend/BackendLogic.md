@@ -188,7 +188,17 @@ Generates 3 to 4 diagnostic MCQs for any given topic with:
 - `explanation`: Pedagogical explanation why the answer is correct and why other options are distractor choices.
 
 ### 2. Algorithmic Knowledge Synthesizer Fallback
-Synthesizes structured diagnostic questions tailored to the topic name, subject, and difficulty level when offline, ensuring students can always practice active recall without an API key.
+Synthesizes structured diagnostic questions tailored to the topic name, subject, difficulty level, and user focus prompt when offline or fallback mode is active. Detects keyword intents (e.g. `complexity`, `security`, `scenario`, `architecture`, `edge cases`) to produce realistic university engineering MCQs with comprehensive explanations.
+
+### 3. On-Demand Quiz Customization Parameters
+The quiz generator accepts custom parameters via `POST /api/topics/:topicId/generate-quiz`:
+```json
+{
+  "difficulty": "EASY" | "MEDIUM" | "HARD",
+  "customPrompt": "Focus on time complexity, bottlenecks and edge cases",
+  "count": 3
+}
+```
 
 ---
 
