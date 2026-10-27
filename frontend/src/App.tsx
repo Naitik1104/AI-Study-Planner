@@ -150,10 +150,26 @@ function App() {
   }
 
   async function generatePlan(customPrompt?: string) {
-    const sessions = await persist(() => plannerApi.generateSchedule(customPrompt), customPrompt ? 'AI adaptive plan generated' : 'Study plan generated')
+    let resultEngine: 'api' | 'fallback' = data.aiStatus?.engine ?? 'fallback'
+    let sessionCount = 0
+    const sessions = await persist(async () => {
+      const res = await plannerApi.generateSchedule(customPrompt)
+      if (Array.isArray(res)) {
+        sessionCount = res.length
+        return res
+      } else {
+        sessionCount = res.sessions.length
+        resultEngine = res.aiEngine
+        return res.sessions
+      }
+    }, 'Study plan saved')
+
     if (!sessions) return
     setView('schedule')
-    setNotice(`${sessions.length} sessions scheduled with spaced revision`)
+    const engineNotice = resultEngine === 'api'
+      ? `🟢 ${sessionCount} sessions planned with AI`
+      : `🔵 ${sessionCount} sessions planned with algorithm`
+    setNotice(engineNotice)
   }
 
   async function generateAiQuiz(topicId: string) {
@@ -183,6 +199,7 @@ function App() {
     return result
   }
 
+  const activeEngine = data.aiStatus?.engine ?? 'fallback'
   const pageTitle = view === 'overview' ? 'Your learning, in focus.' : navItems.find((item) => item.id === view)?.label ?? 'Study planner'
 
   return (
@@ -206,6 +223,10 @@ function App() {
         <header className="topbar">
           <div className="breadcrumb"><strong>{view === 'overview' ? 'Overview' : pageTitle}</strong></div>
           <div className="topbar-actions">
+            <span
+              className={`status-dot ${activeEngine === 'api' ? 'dot-green' : 'dot-blue'}`}
+              title={activeEngine === 'api' ? 'AI active' : 'Algorithmic planner active'}
+            />
             <span className="today-label"><CalendarDays size={15} />{new Intl.DateTimeFormat('en', { weekday: 'short', month: 'short', day: 'numeric' }).format(new Date())}</span>
             <button className="button button-dark button-small" disabled={!hasLoaded || isSaving} onClick={() => setShowSubjectForm(true)}><Plus size={16} /> Add subject</button>
           </div>
@@ -469,10 +490,10 @@ function Schedule({ data, onGenerate, onToggleSession }: {
     <section className="schedule-page">
       {/* AI Prompting & Intelligent Generation Header */}
       <div className="ai-planner-bar">
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px', marginBottom: '14px' }}>
           <div>
-            <span className="section-kicker"><Sparkles size={13} /> AI CUSTOM INSTRUCTION OR PROMPT</span>
-            <strong style={{ fontSize: '13px', color: '#2b3127' }}>Personalize your schedule via Natural Language or Heuristics</strong>
+            <span className="section-kicker"><Sparkles size={13} /> CUSTOM INSTRUCTIONS & PROMPTS</span>
+            <strong style={{ fontSize: '13px', color: '#2b3127' }}>Personalize your study schedule</strong>
           </div>
           <span style={{ fontSize: '11px', color: '#747c6e' }}>Daily capacity: <strong>{data.dailyStudyHours} hrs/day</strong></span>
         </div>

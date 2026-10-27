@@ -8,7 +8,7 @@ export interface GeneratedQuestion {
 }
 
 /**
- * Algorithmic quiz question generator (runs when no AI API is connected).
+ * Algorithmic quiz question generator (runs when no AI API is connected or API fails).
  * Synthesizes high-yield diagnostic questions based on topic name, subject, and difficulty.
  */
 export function generateAlgorithmicQuestions(
@@ -75,22 +75,76 @@ export function generateAlgorithmicQuestions(
 }
 
 /**
- * Generates quiz questions using Gemini API or falls back to algorithmic synthesis.
+ * Generates quiz questions using OpenCode API.
  */
-export async function generateQuizQuestions(
+async function generateQuizViaOpenCode(
+  topicName: string,
+  subjectName: string,
+  difficulty: string
+): Promise<GeneratedQuestion[]> {
+  const apiKey = process.env.OPEN_CODE_API_KEY;
+  if (!apiKey || apiKey.trim() === "") throw new Error("No OPEN_CODE_API_KEY");
+
+  const model = process.env.OPEN_CODE_MODEL || "gpt-5.4-mini";
+  const systemPrompt = `You are an expert academic educator and exam creator.
+Generate 3 to 4 high-quality Multiple Choice Questions (MCQs) for a student preparing for exams on the given topic.
+Output ONLY a valid JSON array of objects with fields:
+- "prompt": question text
+- "options": array of 4 distinct choices
+- "answer": "A", "B", "C", or "D"
+- "explanation": educational explanation why that answer is correct
+Output ONLY the raw JSON array. Do not include markdown codeblocks or conversational text.`;
+
+  const userPrompt = `Subject: ${subjectName}\nTopic: ${topicName}\nDifficulty: ${difficulty}`;
+
+  const res = await fetch("https://opencode.ai/inference/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${apiKey.trim()}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+      temperature: 0.3,
+      max_tokens: 1000,
+    }),
+  });
+
+  if (!res.ok) {
+    throw new Error(`OpenCode quiz generation failed with status ${res.status}`);
+  }
+
+  const data = (await res.json()) as any;
+  const rawText: string = data?.choices?.[0]?.message?.content?.trim() || "";
+  const jsonMatch = rawText.match(/\[[\s\S]*\]/);
+  const cleanJson = jsonMatch ? jsonMatch[0] : rawText;
+  const parsed = JSON.parse(cleanJson);
+  if (!Array.isArray(parsed) || parsed.length === 0) {
+    throw new Error("Invalid format from OpenCode quiz generation");
+  }
+  return parsed;
+}
+
+/**
+ * Generates quiz questions using Gemini API.
+ */
+async function generateQuizViaGemini(
   topicName: string,
   subjectName: string,
   difficulty: string
 ): Promise<GeneratedQuestion[]> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey || apiKey.includes("your-api-key") || apiKey.trim() === "") {
-    return generateAlgorithmicQuestions(topicName, subjectName, difficulty);
+    throw new Error("No GEMINI_API_KEY");
   }
 
-  try {
-    const ai = new GoogleGenAI({ apiKey });
+  const ai = new GoogleGenAI({ apiKey });
 
-    const systemInstruction = `You are an expert academic educator and exam creator.
+  const systemInstruction = `You are an expert academic educator and exam creator.
 Generate 3 to 4 high-quality Multiple Choice Questions (MCQs) for a student preparing for exams on the given topic.
 Each question must have:
 - prompt: Clear, conceptual question text.
@@ -98,54 +152,77 @@ Each question must have:
 - answer: Single letter matching the correct choice: "A", "B", "C", or "D".
 - explanation: Clear educational explanation why that answer is correct.`;
 
-    const promptText = `
+  const promptText = `
 Subject: ${subjectName}
 Topic: ${topicName}
 Difficulty: ${difficulty}
 `;
 
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: promptText,
-      config: {
-        systemInstruction,
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.ARRAY,
-          items: {
-            type: Type.OBJECT,
-            properties: {
-              prompt: { type: Type.STRING },
-              options: {
-                type: Type.ARRAY,
-                items: { type: Type.STRING },
-              },
-              answer: {
-                type: Type.STRING,
-                enum: ["A", "B", "C", "D"],
-              },
-              explanation: { type: Type.STRING },
+  const response = await ai.models.generateContent({
+    model: "gemini-2.5-flash",
+    contents: promptText,
+    config: {
+      systemInstruction,
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: Type.ARRAY,
+        items: {
+          type: Type.OBJECT,
+          properties: {
+            prompt: { type: Type.STRING },
+            options: {
+              type: Type.ARRAY,
+              items: { type: Type.STRING },
             },
-            required: ["prompt", "options", "answer", "explanation"],
+            answer: {
+              type: Type.STRING,
+              enum: ["A", "B", "C", "D"],
+            },
+            explanation: { type: Type.STRING },
           },
+          required: ["prompt", "options", "answer", "explanation"],
         },
       },
-    });
+    },
+  });
 
-    const text = response.text;
-    if (!text) {
-      throw new Error("Empty response from Gemini API");
-    }
+  const text = response.text;
+  if (!text) throw new Error("Empty response from Gemini API");
 
-    const parsed: GeneratedQuestion[] = JSON.parse(text);
-    if (!Array.isArray(parsed) || parsed.length === 0) {
-      return generateAlgorithmicQuestions(topicName, subjectName, difficulty);
-    }
-
-    return parsed;
-  } catch (error) {
-    console.warn("Gemini quiz generation failed, using algorithmic generator:", error);
-    return generateAlgorithmicQuestions(topicName, subjectName, difficulty);
+  const parsed: GeneratedQuestion[] = JSON.parse(text);
+  if (!Array.isArray(parsed) || parsed.length === 0) {
+    throw new Error("Invalid response format from Gemini API");
   }
+
+  return parsed;
 }
 
+/**
+ * Generates quiz questions using OpenCode API first, Gemini API second, or falls back to algorithmic synthesis.
+ */
+export async function generateQuizQuestions(
+  topicName: string,
+  subjectName: string,
+  difficulty: string
+): Promise<GeneratedQuestion[]> {
+  // 1. Try OpenCode API
+  if (process.env.OPEN_CODE_API_KEY && process.env.OPEN_CODE_API_KEY.trim().length > 5) {
+    try {
+      return await generateQuizViaOpenCode(topicName, subjectName, difficulty);
+    } catch (e: any) {
+      console.warn("OpenCode quiz generation failed, trying fallback:", e.message);
+    }
+  }
+
+  // 2. Try Gemini API
+  if (process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.trim().length > 10) {
+    try {
+      return await generateQuizViaGemini(topicName, subjectName, difficulty);
+    } catch (e: any) {
+      console.warn("Gemini quiz generation failed, using algorithmic generator:", e.message);
+    }
+  }
+
+  // 3. Algorithmic Fallback
+  return generateAlgorithmicQuestions(topicName, subjectName, difficulty);
+}

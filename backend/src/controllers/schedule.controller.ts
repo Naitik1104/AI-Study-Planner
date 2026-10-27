@@ -5,7 +5,7 @@ import { getLocalUser } from "./profile.controller";
 import { TopicStatus, SessionStatus, ScheduleTrigger } from "@prisma/client";
 import { calculatePriorityScore, calculateStudentWeakness } from "../utils/priority";
 import { generateSchedule, AllocationTopic } from "../utils/allocation";
-import { parseCustomPrompt } from "../utils/ai_parser";
+import { parseCustomPrompt, probeAiEngine, getLastPlanningEngine } from "../utils/ai_parser";
 import { mapSession } from "../utils/mappers";
 
 const sessionSchema = z.object({
@@ -33,11 +33,16 @@ export async function executeScheduleGeneration(
   });
 
   if (!topics.length) {
-    return [];
+    const status = await probeAiEngine();
+    return {
+      studySessions: [],
+      aiEngine: status.engine,
+      aiProvider: status.provider,
+    };
   }
 
-  // Parse prompt intent (Gemini AI API or Algorithmic Fallback)
-  const topicMultipliers = await parseCustomPrompt(
+  // Parse prompt intent (OpenCode API, Gemini API, or Algorithmic Fallback)
+  const parseResult = await parseCustomPrompt(
     customPrompt,
     topics.map((t) => ({
       id: t.id,
@@ -80,7 +85,7 @@ export async function executeScheduleGeneration(
     dailyCapacityMinutes,
     start,
     30, // 30-day projection window
-    topicMultipliers
+    parseResult.multipliers
   );
 
   const schedule = await prisma.$transaction(async (transaction) => {
@@ -101,7 +106,11 @@ export async function executeScheduleGeneration(
     });
   });
 
-  return schedule.studySessions;
+  return {
+    studySessions: schedule.studySessions,
+    aiEngine: parseResult.engine,
+    aiProvider: parseResult.provider,
+  };
 }
 
 export const generateStudySchedule = async (request: Request, response: Response) => {
@@ -118,13 +127,23 @@ export const generateStudySchedule = async (request: Request, response: Response
     return;
   }
 
-  const sessions = await executeScheduleGeneration(
+  const result = await executeScheduleGeneration(
     user.id,
     ScheduleTrigger.MANUAL_REGENERATION,
     customPrompt
   );
 
-  response.status(201).json(sessions.map(mapSession));
+  const mapped = result.studySessions.map(mapSession);
+
+  // Return both array and metadata wrapper for seamless frontend integration
+  response.status(201).json({
+    sessions: mapped,
+    aiEngine: result.aiEngine,
+    aiProvider: result.aiProvider,
+    message: result.aiEngine === "api"
+      ? "Study plan generated with AI"
+      : "Study plan generated with algorithmic planner",
+  });
 };
 
 export const updateSessionStatus = async (request: Request, response: Response) => {

@@ -43,11 +43,26 @@ export type QuizQuestion = {
 	subjectName: string
 }
 
+export type AiEngineStatus = {
+	engine: 'api' | 'fallback'
+	provider: 'opencode' | 'gemini' | 'fallback'
+	label: string
+	details: string
+}
+
+export type GenerationResult = {
+	sessions: StudySession[]
+	aiEngine: 'api' | 'fallback'
+	aiProvider: string
+	message?: string
+}
+
 export type PlannerData = {
 	subjects: Subject[]
 	sessions: StudySession[]
 	questions: QuizQuestion[]
 	dailyStudyHours: number
+	aiStatus?: AiEngineStatus
 }
 
 type PlannerResponse = {
@@ -59,6 +74,7 @@ type PlannerResponse = {
 	})[]
 	sessions: StudySession[]
 	questions: QuizQuestion[]
+	aiStatus?: AiEngineStatus
 }
 
 const colors = ['#dce978', '#f2ad8f', '#a9c9f4', '#d0b7ec', '#89c9b4']
@@ -99,6 +115,12 @@ export const plannerApi = {
 			})),
 			sessions: result.sessions,
 			questions: result.questions,
+			aiStatus: result.aiStatus ?? {
+				engine: 'fallback',
+				provider: 'fallback',
+				label: 'Fallback Algo Active',
+				details: 'Using deterministic Multi-Criteria Decision Analysis (MCDA) + cognitive interleaving',
+			},
 		}
 	},
 	addSubject: (name: string, examDate: string) => request<Subject>('/subjects', json('POST', { name, examDate })),
@@ -108,7 +130,7 @@ export const plannerApi = {
 	setTopicCompleted: (topicId: string, completed: boolean) =>
 		request<Topic>(`/topics/${encodeURIComponent(topicId)}`, json('PATCH', { completed })),
 	generateSchedule: (customPrompt?: string) =>
-		request<StudySession[]>('/schedule/generate', json('POST', { customPrompt })),
+		request<GenerationResult | StudySession[]>('/schedule/generate', json('POST', { customPrompt })),
 	setSessionCompleted: (sessionId: string, completed: boolean) =>
 		request<StudySession>(`/sessions/${encodeURIComponent(sessionId)}`, json('PATCH', { completed })),
 	addQuestion: (topicId: string, prompt: string, options: string[], answer: string, explanation?: string) =>

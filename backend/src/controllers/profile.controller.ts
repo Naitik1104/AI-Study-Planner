@@ -3,6 +3,7 @@ import { PrismaClient, TopicStatus } from "@prisma/client";
 import { prisma } from "../config/db";
 import { mapSubject, mapSession, mapQuestion } from "../utils/mappers";
 import { calculatePriorityScore, calculateStudentWeakness } from "../utils/priority";
+import { probeAiEngine } from "../utils/ai_parser";
 
 export async function getLocalUser(database: PrismaClient = prisma) {
   const email = process.env.STUDY_PLANNER_USER_EMAIL ?? "student@local.studywell";
@@ -25,7 +26,7 @@ export const getPlannerData = async (_request: Request, response: Response) => {
   const user = await getLocalUser();
   const currentDate = new Date();
 
-  const [subjects, schedule, questions] = await Promise.all([
+  const [subjects, schedule, questions, aiStatus] = await Promise.all([
     prisma.subject.findMany({
       where: { userId: user.id },
       include: {
@@ -53,6 +54,7 @@ export const getPlannerData = async (_request: Request, response: Response) => {
       include: { topic: { include: { subject: true } } },
       orderBy: { id: "asc" },
     }),
+    probeAiEngine(),
   ]);
 
   // Compute explainable AI insights for each topic
@@ -86,6 +88,6 @@ export const getPlannerData = async (_request: Request, response: Response) => {
     subjects: enhancedSubjects,
     sessions: schedule?.studySessions.map(mapSession) ?? [],
     questions: questions.map(mapQuestion),
+    aiStatus,
   });
 };
-

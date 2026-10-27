@@ -142,27 +142,37 @@ Located at [`backend/src/utils/allocation.ts`](file:///c:/Users/naiti/MPRs_Sem7/
 
 ---
 
-## 5. Natural Language Prompting (Gemini AI + Algorithmic Fallback)
+## 5. Natural Language Prompting (OpenCode API + Algorithmic Fallback)
 
 Located at [`backend/src/utils/ai_parser.ts`](file:///c:/Users/naiti/MPRs_Sem7/ROSP/ai-study-planner/backend/src/utils/ai_parser.ts):
 
 When the student provides a custom instruction (e.g., *"Focus on Linked list more, give extra time to DBMS transactions"*):
 
-### 1. Primary Engine: Gemini AI (`@google/genai`)
-- Model: `gemini-2.5-flash`
+### 1. Primary Engine: OpenCode AI (`OPEN_CODE_API_KEY`)
+- Key Configuration: `OPEN_CODE_API_KEY` in `backend/.env` (prefixed with `oc_sk_...`).
+- Inference Endpoint: `https://opencode.ai/inference/v1/chat/completions`.
+- Model: `gpt-5.4-mini` (configurable via `OPEN_CODE_MODEL`).
 - System instruction instructs the model to return a structured JSON array of `{ topicId: string, multiplier: number }`.
 - Multipliers:
   - Default: `1.0`
   - High focus: `2.0` to `3.0`
-  - Low priority / skip: `0.2` to `0.6`
+  - Low priority / skip: `0.2` to `0.5`
 
-### 2. Algorithmic Fallback Engine (`algorithmicFallbackParse`)
-Runs automatically if `GEMINI_API_KEY` is missing, expired, or rate-limited:
+### 2. Secondary Engine: Gemini AI (`GEMINI_API_KEY`)
+- If OpenCode encounters upstream limits or is unconfigured, checks `GEMINI_API_KEY` as an alternative cloud provider.
+
+### 3. Algorithmic Fallback Engine (`algorithmicFallbackParse`)
+Runs automatically if API calls fail, keys are absent, or rate limits/fund limits are reached:
 - Employs regex word-boundary pattern matching (`/(^|\b|\W)term(\b|\W|$)/i`) on topic names and subject names.
 - Analyzes intent keywords:
   - Boost: `["focus", "more", "priority", "prioritize", "urgent", "important", "heavy", "master", "struggling", "weak", "revise"]` $\rightarrow$ sets topic multiplier to **2.5×** (or **1.7×** for entire subject).
   - Reduce / Skip: `["less", "skip", "ignore", "don't", "avoid", "easy", "later"]` $\rightarrow$ sets topic multiplier to **0.2×** (skip) or **0.5×** (less).
   - Balancing: Slights unmentioned topics to **0.85×** when specific topics are explicitly boosted.
+
+### 4. UI Engine Indicator (Green Dot vs Blue Dot)
+The app surfaces a strategic status indicator badge in the **Top Navigation Bar** and within the **Study Plan AI Prompt Bar**:
+- 🟢 **Green Dot (`dot-green`)**: Indicates the system is actively using the external API (`OpenCode API` or cloud model) for natural language reasoning and topic balancing.
+- 🔵 **Blue Dot (`dot-blue`)**: Indicates the system is running on the local **Algorithmic Fallback Engine**, employing deterministic MCDA scoring, Pomodoro chunking, and cognitive interleaving.
 
 ---
 
@@ -246,3 +256,4 @@ To populate realistic sample subjects, topics, and initial diagnostic questions:
 cd backend
 npx ts-node prisma/seed.ts
 ```
+
